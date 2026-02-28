@@ -1,0 +1,41 @@
+{
+  "name": "risquesavantachat-api",
+  "version": "0.1.0",
+  "description": "API RisquesAvantAchat - risques immobiliers",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "db:migrate": "node --loader ts-node/esm ../../node_modules/.bin/db-migrate",
+    "lint": "eslint src --ext .ts",
+    "docs": "typedoc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@risquesavantachat/shared-types": "file:../shared",
+    "compression": "^1.8.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.3.1",
+    "express": "^4.21.0",
+    "express-async-errors": "^3.1.1",
+    "express-rate-limit": "^8.2.1",
+    "helmet": "^8.1.0",
+    "lru-cache": "^11.2.6",
+    "pdf-lib": "^1.17.1",
+    "pg": "^8.13.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/compression": "^1.8.1",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.9.0",
+    "tsx": "^4.19.2",
+    "typedoc": "^0.28.17",
+    "typescript": "^5.6.3",
+    "vitest": "^4.0.18"
+  }
+}

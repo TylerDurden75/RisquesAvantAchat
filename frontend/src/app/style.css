@@ -1,0 +1,30 @@
+/* Base — variables et reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Attribution MapLibre */
+@media screen {
+  .maplibregl-ctrl-attrib.maplibregl-compact-show {
+    padding: 2px 28px 2px 8px;
+    visibility: visible;
+    bottom: 0.3rem;
+  }
+}

@@ -1,0 +1,12 @@
+node_modules/
+dist/
+docs/
+test-results/
+.env
+*.log
+.DS_Store
+*.local
+
+# IDE
+.idea/
+.vscode/

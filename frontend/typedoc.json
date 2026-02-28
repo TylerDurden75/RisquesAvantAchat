@@ -1,0 +1,11 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/api", "src/composables", "src/types"],
+  "entryPointStrategy": "expand",
+  "out": "docs",
+  "exclude": ["**/node_modules/**", "**/*.vue"],
+  "excludePrivate": true,
+  "readme": "none",
+  "commentStyle": "jsdoc",
+  "skipErrorChecking": true
+}

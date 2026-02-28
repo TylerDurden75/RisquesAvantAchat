@@ -1,0 +1,7 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  # Définir VITE_API_URL pour pointer vers l'API en production
+  # VITE_API_URL = "https://api.exemple.com"
