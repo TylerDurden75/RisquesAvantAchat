@@ -1,8 +1,9 @@
 /**
  * Service DVF — indicateurs de prix immobiliers.
  *
- * Tente d'abord les prix localisés (rayon 500 m) via l'API cquest, sinon fallback
- * sur les indicateurs par commune (API Tabulaire data.gouv.fr).
+ * Tente d'abord les prix localisés via l'API Cquest en cascade de rayons
+ * (250 m → 500 m → 1 km), en retenant le premier avec assez de ventes.
+ * Sinon fallback sur les indicateurs par commune (API Tabulaire data.gouv.fr).
  *
  * @module modules/dvf/dvf.service
  */
@@ -16,6 +17,11 @@ export type { DvfIndicators };
 const TABULAR_API =
   'https://tabular-api.data.gouv.fr/api/resources/1b85be7c-17ce-42dc-b191-3b8f3c469087/data';
 const CQUEST_API = 'https://api.cquest.org/dvf';
+
+/** Rayons testés en cascade (du plus précis au plus large). */
+const RADII_METERS = [250, 500, 1000];
+/** Nombre minimum de mutations pour considérer le prix local fiable. */
+const MIN_MUTATIONS_FOR_LOCAL = 5;
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 /** Préfixe des clés de cache (changer pour v2 lors d'un changement de format). */
@@ -154,6 +160,24 @@ function aggregateFromCquest(
   };
 }
 
+async function fetchCquestForRadius(
+  lat: number,
+  lon: number,
+  radiusMeters: number
+): Promise<CquestFeature[]> {
+  const url = `${CQUEST_API}?lat=${lat}&lon=${lon}&dist=${radiusMeters}`;
+  const res = await fetch(url, {
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(6000),
+  });
+  if (!res.ok) return [];
+  const json = (await res.json()) as {
+    type?: string;
+    features?: CquestFeature[];
+  };
+  return json.features ?? [];
+}
+
 async function getIndicatorsNearby(
   lat: number,
   lon: number,
@@ -168,21 +192,20 @@ async function getIndicatorsNearby(
   }
 
   try {
-    const url = `${CQUEST_API}?lat=${lat}&lon=${lon}&dist=500`;
-    const res = await fetch(url, {
-      headers: { Accept: 'application/json' },
-      signal: AbortSignal.timeout(6000),
-    });
-    if (!res.ok) return null;
-    const json = (await res.json()) as {
-      type?: string;
-      features?: CquestFeature[];
-    };
-    const features = json.features ?? [];
-    const data = aggregateFromCquest(features, codeInsee);
-    if (data) {
-      storeCoords.set(cacheKey, data);
-      return data;
+    for (const radiusMeters of RADII_METERS) {
+      const features = await fetchCquestForRadius(lat, lon, radiusMeters);
+      const data = aggregateFromCquest(features, codeInsee);
+      if (data && (data.nbMutations ?? 0) >= MIN_MUTATIONS_FOR_LOCAL) {
+        data.rayonMeters = radiusMeters;
+        storeCoords.set(cacheKey, data);
+        logger.info('DVF local from Cquest', {
+          codeInsee,
+          key: coordsKey,
+          radiusMeters,
+          nbMutations: data.nbMutations,
+        });
+        return data;
+      }
     }
   } catch (e) {
     logger.warn('Cquest API failed', {

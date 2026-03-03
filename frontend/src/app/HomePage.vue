@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import EmptyState from "@shared/components/EmptyState.vue";
-import { ref } from "vue";
 import { RisksCard } from "@features/risks";
 import { MapView } from "@features/geo";
 import { useReportData } from "./composables/useReportData.js";
@@ -19,9 +18,13 @@ const {
   selectedRiskTypes,
   toggleRiskType,
   codeInsee,
+  radiusMeters,
+  RADIUS_PRESETS,
 } = useReportData();
 
-const mapViewRef = ref<InstanceType<typeof MapView> | null>(null);
+function setRadiusMeters(v: number) {
+  radiusMeters.value = v;
+}
 
 </script>
 
@@ -30,13 +33,13 @@ const mapViewRef = ref<InstanceType<typeof MapView> | null>(null);
     <div class="map-fullscreen">
       <Suspense>
         <MapView
-          ref="mapViewRef"
           :key="codeInsee ?? 'no-address'"
           :center="mapCenter"
           :zoom="mapCenter ? 15 : 6"
           :show-marker="!!mapCenter"
           :risk-zones="zones"
           :risk-type-filters="selectedRiskTypes"
+          :radius-meters="radiusMeters"
         />
         <template #fallback>
           <div class="map-loading" aria-hidden="true" />
@@ -60,6 +63,9 @@ const mapViewRef = ref<InstanceType<typeof MapView> | null>(null);
           :selected-risk-types="selectedRiskTypes"
           :on-toggle-risk-type="toggleRiskType"
           :copy-share-link="copyShareLink"
+          :radius-meters="radiusMeters"
+          :radius-presets="RADIUS_PRESETS"
+          @update:radius-meters="setRadiusMeters"
         />
       </Transition>
       <footer class="floating-footer" role="contentinfo" aria-label="Sources des données">

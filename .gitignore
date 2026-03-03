@@ -7,6 +7,9 @@ test-results/
 .DS_Store
 *.local
 
+# Lock file npm (on utilise yarn)
+package-lock.json
+
 # IDE
 .idea/
 .vscode/

@@ -32,7 +32,7 @@ const displayedCategories = computed(() =>
 </template>
 
 <style scoped>
-.risks-list { list-style: none; margin: 0; padding: 0; text-align: left; }
+.risks-list { list-style: none; margin: 0; padding: 0; text-align: left; min-width: 0; }
 .risk-item {
   display: flex;
   flex-direction: column;
@@ -40,10 +40,11 @@ const displayedCategories = computed(() =>
   padding: 0.5rem 0;
   font-size: 0.8125rem;
   border-bottom: 1px solid #f4f4f5;
+  min-width: 0;
 }
 .risk-item:last-of-type { border-bottom: none; }
-.risk-item-main { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
-.risk-recommendation { font-size: 0.7rem; color: var(--color-primary, #0d9488); line-height: 1.4; margin: 0; }
-.risk-name { font-weight: 600; color: var(--color-text, #18181b); }
-.risk-level { font-size: 0.75rem; color: var(--color-text-muted, #52525b); flex-shrink: 0; }
+.risk-item-main { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; min-width: 0; }
+.risk-recommendation { font-size: 0.7rem; color: var(--color-primary, #0d9488); line-height: 1.4; margin: 0; overflow-wrap: break-word; word-break: break-word; }
+.risk-name { font-weight: 600; color: var(--color-text, #18181b); min-width: 0; overflow-wrap: break-word; word-break: break-word; }
+.risk-level { font-size: 0.75rem; color: var(--color-text-muted, #52525b); flex-shrink: 1; min-width: 0; overflow-wrap: break-word; word-break: break-word; text-align: right; }
 </style>

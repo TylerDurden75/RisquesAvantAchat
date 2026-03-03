@@ -27,11 +27,22 @@ export interface RiskDocument {
   reportUrl?: string;
 }
 
+/** Info parcelle cadastrale (API Carto Cadastre IGN). */
+export interface ParcelleInfo {
+  code_insee: string;
+  section: string;
+  numero: string;
+}
+
 export interface RiskScoreResult {
   globalScore: number;
   scoreInterpretation?: ScoreInterpretation;
   categories: RiskCategory[];
   documents: RiskDocument[];
+  /** Parcelle cadastrale contenant le point (si disponible). */
+  parcelle?: ParcelleInfo | null;
+  /** Rayon de la zone d'analyse en mètres (pour affichage du cercle sur la carte). */
+  radiusMeters?: number;
 }
 
 export interface RiskZonesGeoJSON {
@@ -47,6 +58,8 @@ export interface RiskZonesGeoJSON {
 export interface DvfIndicators {
   codeInsee: string;
   granularite?: 'quartier' | 'commune';
+  /** Rayon en mètres utilisé pour le prix local (quartier). Ex. 250, 500, 1000. */
+  rayonMeters?: number;
   prixM2Moyen?: number;
   prixMoyen?: number;
   nbMutations?: number;

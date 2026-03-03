@@ -86,33 +86,18 @@ describe('dvfService', () => {
   });
 
   describe('getIndicators', () => {
-    it('privilégie cquest (quartier) quand disponible', async () => {
+    it('privilégie cquest (quartier) avec le premier rayon ayant assez de ventes (≥5)', async () => {
+      // 250 m : 6 ventes → on retient ce rayon
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          features: [
-            {
-              properties: {
-                valeur_fonciere: 200000,
-                surface_reelle_bati: 50,
-                type_local: 'Appartement',
-              },
+          features: [1, 2, 3, 4, 5, 6].map((i) => ({
+            properties: {
+              valeur_fonciere: 200000 + i * 10000,
+              surface_reelle_bati: 50 + i,
+              type_local: 'Appartement',
             },
-            {
-              properties: {
-                valeur_fonciere: 250000,
-                surface_reelle_bati: 55,
-                type_local: 'Appartement',
-              },
-            },
-            {
-              properties: {
-                valeur_fonciere: 300000,
-                surface_reelle_bati: 60,
-                type_local: 'Appartement',
-              },
-            },
-          ],
+          })),
         }),
       });
 
@@ -120,16 +105,22 @@ describe('dvfService', () => {
 
       expect(result).not.toBeNull();
       expect(result?.granularite).toBe('quartier');
-      expect(result?.nbMutations).toBe(3);
+      expect(result?.rayonMeters).toBe(250);
+      expect(result?.nbMutations).toBe(6);
       expect(result?.prixM2Moyen).toBeGreaterThan(0);
     });
 
-    it('fallback sur commune si cquest échoue ou retourne trop peu', async () => {
+    it('fallback sur commune si cquest retourne trop peu sur tous les rayons (250, 500, 1000)', async () => {
+      // 250 m, 500 m, 1000 m : chacun < 5 ventes (on renvoie 3 pour avoir un aggregate mais sous le seuil)
+      const fewFeatures = [
+        { properties: { valeur_fonciere: 200000, surface_reelle_bati: 50, type_local: 'Appartement' } },
+        { properties: { valeur_fonciere: 250000, surface_reelle_bati: 55, type_local: 'Appartement' } },
+        { properties: { valeur_fonciere: 300000, surface_reelle_bati: 60, type_local: 'Appartement' } },
+      ];
       mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ features: [] }),
-        })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ features: fewFeatures }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ features: fewFeatures }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ features: fewFeatures }) })
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({

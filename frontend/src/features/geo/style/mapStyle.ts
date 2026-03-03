@@ -10,6 +10,10 @@ export const ZONES_SOURCE_ID = 'risk-zones';
 export const ZONES_FILL_LAYER_ID = 'risk-zones-fill';
 export const ZONES_LINE_LAYER_ID = 'risk-zones-line';
 
+/** Cercle de délimitation de zone (rayon en mètres). */
+export const RADIUS_CIRCLE_SOURCE_ID = 'radius-circle';
+export const RADIUS_CIRCLE_LAYER_ID = 'radius-circle-layer';
+
 /** IDs des calques WMS BRGM (proxy backend). */
 export const WMS_RGA_SOURCE_ID = 'wms-rga';
 export const WMS_RGA_LAYER_ID = 'wms-rga-layer';

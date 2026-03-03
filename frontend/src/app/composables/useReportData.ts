@@ -10,13 +10,17 @@ import { useRisks, useRiskZones, extractRiskTypes, ARGILES_RISK_TYPE } from '@fe
 import { useDvf } from '@features/dvf';
 import { GEO_CONTEXT_KEY } from '../geoContext.js';
 
+/** Rayons de zone disponibles (mètres). */
+export const RADIUS_PRESETS = [500, 1000, 2000, 5000] as const;
+
 export function useReportData() {
   const geo = inject(GEO_CONTEXT_KEY)!;
   const selectedAddress = geo.selectedAddress;
   const mapCenter = geo.mapCenter;
   const copyShareLink = geo.copyShareLink;
 
-  const { risks, loading, error, retry } = useRisks(selectedAddress);
+  const radiusMeters = ref(500);
+  const { risks, loading, error, retry } = useRisks(selectedAddress, undefined, radiusMeters);
   const codeInsee = computed(() => {
     const addr = selectedAddress.value?.properties;
     if (!addr) return undefined;
@@ -69,5 +73,7 @@ export function useReportData() {
     selectedRiskTypes,
     toggleRiskType,
     codeInsee,
+    radiusMeters,
+    RADIUS_PRESETS,
   };
 }

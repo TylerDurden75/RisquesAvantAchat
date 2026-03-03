@@ -19,6 +19,13 @@ export const zonesQuerySchema = z.object({
   code_insee: z.string().trim().min(1).max(10),
 });
 
+/** Query pour l'endpoint état des risques (pré-remplissage). */
+export const etatDesRisquesQuerySchema = z.object({
+  code_insee: z.string().trim().min(1).max(10),
+  lat: z.string().pipe(z.coerce.number().min(-90).max(90)).optional(),
+  lng: z.string().pipe(z.coerce.number().min(-180).max(180)).optional(),
+});
+
 // Schémas pour validation des réponses Georisques (v1 et v2)
 // v2 utilise parfois "content" au lieu de "data" et une pagination totalElements / pageNumber / pageSize
 
@@ -244,3 +251,38 @@ export const aziResponseSchema = z.object({
   const content = r.content ?? [];
   return { data: content, total: r.totalElements ?? content.length };
 });
+
+/** Réponse CATNAT (arrêtés de catastrophe naturelle) — v1 ou v2. */
+const catnatItemSchema = z.object({
+  date_arrete: z.string().optional(),
+  dateArrete: z.string().optional(),
+  libelle_risque: z.string().optional(),
+  libelleRisque: z.string().optional(),
+  libelle_commune: z.string().optional(),
+  code_insee: z.string().optional(),
+}).passthrough();
+
+export const catnatResponseSchema = z.object({
+  data: z.array(catnatItemSchema).optional(),
+  content: z.array(catnatItemSchema).optional(),
+  results: z.number().optional(),
+  totalElements: z.number().optional(),
+}).transform((r) => ({
+  data: r.data ?? r.content ?? [],
+  count: r.results ?? r.totalElements ?? (r.data ?? r.content ?? []).length,
+}));
+
+/** Réponse générique liste (SIS, BASIAS, IC) — v2 content/totalElements ou v1 data/results. */
+const listCountSchema = z.object({
+  data: z.array(z.record(z.unknown())).optional(),
+  content: z.array(z.record(z.unknown())).optional(),
+  results: z.number().optional(),
+  totalElements: z.number().optional(),
+}).transform((r) => ({
+  data: r.data ?? r.content ?? [],
+  count: r.results ?? r.totalElements ?? (r.data ?? r.content ?? []).length,
+}));
+
+export const sisResponseSchema = listCountSchema;
+export const basiasResponseSchema = listCountSchema;
+export const icResponseSchema = listCountSchema;

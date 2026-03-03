@@ -22,7 +22,22 @@ Feuille de route pour renforcer la valeur du produit et son potentiel de monéti
 - [ ] Observabilité : logs structurés (JSON), métriques (temps de réponse, erreurs), optionnel Sentry/Datadog.
 - [ ] Documentation API : OpenAPI/Swagger.
 
----
+### Sécurité — état et points de vigilance
+- **Déjà en place** : Helmet (en-têtes sécurisés), CORS avec `ALLOWED_ORIGINS` obligatoire en prod, rate limit global (60 req/min en prod), validation Zod sur la plupart des routes (risques, DVF, géocodage, rapport), body JSON limité à 1 Mo, WMS proxy avec whitelist de calques + regex sur bbox, cadastre avec contrôle lat/lng. Pas de requêtes SQL construites à partir d’entrées utilisateur ; secrets (token Georisques) en variables d’environnement.
+- **À renforcer** : (1) Rate limit **spécifique** sur `/api/v1/report/pdf` (génération PDF coûteuse en CPU → risque DoS). (2) Valider le paramètre `id` sur `GET /report/:id` (format attendu) si un jour stockage par id. (3) En production build, durcir la CSP (réduire `unsafe-inline` / `unsafe-eval` si possible avec Vue/MapLibre). (4) DVF : borner lat/lon dans le schéma Zod (ex. -90/90, -180/180) si utilisés pour des appels externes.
+
+### 100K+ connexions — est-ce que ça tiendra ?
+- **Aujourd’hui : non**, sans évolutions. Une seule instance Node, rate limit 60 req/min par IP, caches LRU **en mémoire** (non partagés entre instances), génération PDF synchrone dans la requête. Pour viser 100K connexions ou plus il faut : **reverse proxy** (Nginx/Caddy) + **cache HTTP** sur les réponses stables ; **plusieurs instances** derrière un **load balancer** ; **cache partagé Redis** (risques, DVF, zones) pour que toutes les instances partagent le même cache ; **rate limiting** affiné (par route, ex. PDF plus strict) et éventuellement **file d’attente** pour les PDF ; **observabilité** (métriques, alertes) pour détecter les goulots. L’API est **stateless** (pas de session en mémoire), ce qui facilite la montée en charge horizontale une fois le cache externalisé.
+- **Actuellement** : le sélecteur 500 m / 1 km / 2 km / 5 km ne fait que redimensionner le cercle sur la carte ; les données (score, liste de risques) restent à l’échelle de la **commune** (code Insee).
+- [ ] **À faire** : faire dépendre les données du rayon — soit via l’API Georisques v2 avec lat/lon/rayon si supporté, soit en résolvant les **communes dans le cercle** et en agrégeant leurs risques. Ainsi le score et la liste des risques évolueraient quand l’utilisateur change de zone.
+
+### Prix DVF — affiner la granularité ✅
+- **Implémenté** : **cascade de rayons** 250 m → 500 m → 1 km via API Cquest ; on retient le premier niveau avec ≥ 5 ventes. Le champ `rayonMeters` et le libellé (ex. « quartier (~250 m) ») sont affichés côté frontend et dans le PDF. Fallback sur moyenne communale (Tabulaire) si aucun rayon n’a assez de données.
+
+### Prix DVF — granularité parcellaire (APIs / alternatives)
+- **Meilleure piste identifiée** : l’**API Cquest** (déjà utilisée) accepte une requête par **parcelle** (`numero_plan`) et par **section** cadastrale. On a déjà la parcelle (section, numero) via le module cadastre (API Carto IGN). En interrogeant DVF avec `numero_plan` (ex. `section=89304000ZB&numero_plan=89304000ZB0134`), on obtiendrait un prix au m² à l’échelle **parcellaire** ou **section** — la meilleure granularité possible en open data. À faire : construire l’identifiant `numero_plan` à partir de `code_insee` + `section` + `numero`, tenter DVF par parcelle puis par section si pas assez de ventes, sinon garder la cascade lat/lon/dist actuelle.
+- **Autres APIs** : **API Données foncières** (Cerema / api.gouv.fr) — DVF+ en accès libre avec requête par **emprise rectangulaire (bbox)** ; API en beta, documentation à confirmer. **Urbanora.io** — API DVF+ avec bbox (à vérifier si gratuite ou commerciale). **Tabulaire data.gouv** — indicateurs déjà utilisés en fallback, granularité commune uniquement.
+- [ ] **À faire** : implémenter DVF par parcelle/section (Cquest `numero_plan` / `section`) en utilisant la parcelle déjà récupérée pour les risques ; afficher la granularité « parcelle » ou « section » dans l’UI.
 
 ## Phase 1 — Fondations produit (M0–M1)
 
@@ -74,6 +89,15 @@ Feuille de route pour renforcer la valeur du produit et son potentiel de monéti
 - [ ] Projets d'aménagement (PLU)
 - [ ] Historique sinistres (si données ouvertes)
 
+### 3.4 Surpasser ERRIAL
+Voir **docs/SURPASSER_ERRIAL.md** pour le plan détaillé.
+
+- [x] **CATNAT** — arrêtés catastrophe naturelle (API Georisques) ✅
+- [x] **SIS + BASIAS** — sites et sols pollués, anciens sites industriels ✅
+- [x] **Parcelle cadastrale** — adresse → parcelle (API Carto Cadastre) pour exhaustivité ✅
+- [x] **Installations classées** — risques technologiques (API Georisques) ✅
+- [x] **Pré-remplissage** formulaire état des risques (endpoint JSON `/risks/etat-des-risques`) ✅
+
 ---
 
 ## Phase 4 — Risque prédictif (M6+)
@@ -111,7 +135,7 @@ Passer du descriptif (Georisques) au **prédictif** via ML pour proposer des pro
 
 ## Priorité immédiate (sprint actuel)
 
-Toutes les priorités ci-dessous sont **terminées**. Prochaine cible : Phase 2 (monétisation) ou renforcement Phase 3 (données).
+Toutes les priorités ci-dessous sont **terminées**. Prochaine cible : **Phase 3.4 Surpasser ERRIAL** (voir docs/SURPASSER_ERRIAL.md), puis Phase 2 (monétisation).
 
 1. **Score enrichi** — interprétation + recommandations → crédibilité ✅
 2. **Liens partageables** — viralité + SEO ✅

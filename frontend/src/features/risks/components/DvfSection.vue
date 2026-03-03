@@ -9,7 +9,7 @@ defineProps<{ dvfIndicators: DvfIndicators }>();
     <p class="dvf-title">
       Prix immobilier (DVF {{ dvfIndicators.annee ?? "" }})
       <span v-if="dvfIndicators.granularite" class="dvf-granularite">
-        — {{ dvfIndicators.granularite === "quartier" ? "quartier (~500 m)" : "commune" }}
+        — {{ dvfIndicators.granularite === "quartier" && dvfIndicators.rayonMeters ? `quartier (~${dvfIndicators.rayonMeters} m)` : dvfIndicators.granularite === "quartier" ? "quartier" : "commune" }}
       </span>
     </p>
     <p class="dvf-value">
@@ -32,7 +32,7 @@ defineProps<{ dvfIndicators: DvfIndicators }>();
     <details class="dvf-disclaimer">
       <summary>Limites des données DVF</summary>
       <p class="dvf-caveat">
-        {{ dvfIndicators.granularite === "quartier" ? "Prix localisés à ~500 m." : "Prix à l'échelle de la commune (API quartier parfois indisponible)." }}
+        {{ dvfIndicators.granularite === "quartier" && dvfIndicators.rayonMeters ? `Prix localisés dans un rayon de ~${dvfIndicators.rayonMeters} m.` : dvfIndicators.granularite === "quartier" ? "Prix localisés au quartier." : "Prix à l'échelle de la commune (pas assez de ventes au quartier)." }}
         Les prix peuvent être obsolètes (retard de plusieurs mois voire plus d'un an). Couverture incomplète : Moselle, Bas-Rhin, Haut-Rhin et Mayotte non couverts. Toutes les ventes ne sont pas enregistrées. Pour une estimation fiable, consultez un professionnel ou utilisez MeilleursAgents.
       </p>
     </details>

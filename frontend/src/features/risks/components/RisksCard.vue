@@ -22,7 +22,16 @@ const props = defineProps<{
   selectedRiskTypes: string[];
   onToggleRiskType: (type: string) => void;
   copyShareLink?: () => Promise<boolean>;
+  radiusMeters?: number;
+  radiusPresets?: readonly number[];
 }>();
+
+const emit = defineEmits<{ (e: 'update:radiusMeters', value: number): void }>();
+
+function formatRadius(m: number): string {
+  if (m >= 1000) return `${m / 1000} km`;
+  return `${m} m`;
+}
 
 const displayCategories = computed((): RiskCategory[] => {
   return props.risks?.categories ?? [];
@@ -77,6 +86,26 @@ async function handleCopyShareLink() {
       <div class="coords-row">
         <span class="coords">{{ selectedAddress.geometry.coordinates[1].toFixed(5) }}° N</span>
         <span class="coords">{{ selectedAddress.geometry.coordinates[0].toFixed(5) }}° E</span>
+      </div>
+      <p v-if="risks?.parcelle" class="parcelle-label">
+        Parcelle cadastrale : section {{ risks.parcelle.section || '–' }}, n° {{ risks.parcelle.numero || '–' }}
+      </p>
+      <div v-if="radiusPresets?.length" class="radius-row">
+        <span class="radius-label">Zone :</span>
+        <div class="radius-buttons">
+          <button
+            v-for="r in radiusPresets"
+            :key="r"
+            type="button"
+            class="radius-btn"
+            :class="{ active: (radiusMeters ?? 500) === r }"
+            :aria-pressed="(radiusMeters ?? 500) === r"
+            @click="emit('update:radiusMeters', Number(r))"
+          >
+            {{ formatRadius(r) }}
+          </button>
+        </div>
+        <p class="radius-hint">Le score et les risques sont à l’échelle de la commune. Le cercle sur la carte indique la zone affichée.</p>
       </div>
       <DvfSection v-if="dvfIndicators?.prixM2Moyen" :dvf-indicators="dvfIndicators" />
       <div class="risks-section">
@@ -170,10 +199,56 @@ async function handleCopyShareLink() {
 .info-card-body {
   padding: 1.25rem 1.5rem;
   overflow-y: auto;
+  overflow-x: hidden;
   flex: 1;
   min-height: 0;
 }
 .address-label { font-size: 1rem; font-weight: 600; color: var(--color-text, #18181b); line-height: 1.4; margin-bottom: 0.5rem; }
+.parcelle-label {
+  font-size: 0.85rem;
+  color: var(--muted, #666);
+  margin: 0.25rem 0 0;
+}
+.radius-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0;
+  flex-wrap: wrap;
+}
+.radius-label {
+  font-size: 0.85rem;
+  color: var(--muted, #666);
+}
+.radius-buttons {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+.radius-btn {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+}
+.radius-btn:hover {
+  background: #f3f4f6;
+}
+.radius-btn.active {
+  background: #0d9488;
+  color: #fff;
+  border-color: #0d9488;
+}
+.radius-hint {
+  font-size: 0.7rem;
+  color: var(--color-text-muted, #71717a);
+  margin: 0.35rem 0 0;
+  line-height: 1.3;
+  width: 100%;
+}
 .coords-row { display: flex; gap: 1rem; margin-bottom: 1.25rem; }
 .coords { font-size: 0.75rem; color: var(--color-text-muted, #52525b); font-family: ui-monospace, monospace; }
 .risks-section { padding-top: 1rem; border-top: 1px solid #f4f4f5; text-align: center; }

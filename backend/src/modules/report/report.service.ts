@@ -178,7 +178,12 @@ async function generatePdf(report: Report): Promise<Uint8Array> {
   const dvf = report.dvfData;
   if (dvf) {
     addText('Indicateurs DVF (prix immobilier) :', 11, true);
-    const granularite = dvf.granularite === 'quartier' ? 'quartier (~500 m)' : 'commune';
+    const granularite =
+      dvf.granularite === 'quartier' && dvf.rayonMeters
+        ? `quartier (~${dvf.rayonMeters} m)`
+        : dvf.granularite === 'quartier'
+          ? 'quartier'
+          : 'commune';
     // Utiliser replace pour éviter les espaces insécables de toLocaleString
     const prixM2 = dvf.prixM2Moyen != null 
       ? String(dvf.prixM2Moyen).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') 

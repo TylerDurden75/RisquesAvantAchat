@@ -8,6 +8,8 @@ import {
   ZONES_SOURCE_ID,
   ZONES_FILL_LAYER_ID,
   ZONES_LINE_LAYER_ID,
+  RADIUS_CIRCLE_SOURCE_ID,
+  RADIUS_CIRCLE_LAYER_ID,
   WMS_RGA_SOURCE_ID,
   WMS_RGA_LAYER_ID,
   WMS_MVT_SOURCE_ID,
@@ -26,8 +28,10 @@ const props = withDefaults(
     showMarker?: boolean;
     riskZones?: RiskZonesGeoJSON | null;
     riskTypeFilters?: string[];
+    /** Rayon de la zone d'analyse en mètres (cercle affiché sur la carte). */
+    radiusMeters?: number;
   }>(),
-  { showMarker: false, riskZones: null, riskTypeFilters: () => [] }
+  { showMarker: false, riskZones: null, riskTypeFilters: () => [], radiusMeters: 500 }
 );
 
 const mapContainer = ref<HTMLDivElement | null>(null);
@@ -55,6 +59,8 @@ onMounted(() => {
     nextTick(() => map!.resize());
     setTimeout(() => map!.resize(), 100);
     addWmsLayers();
+    addRadiusCircleLayer();
+    updateRadiusCircle();
     syncZonesAndFilter();
     applyRgaLayerVisibility();
   });
@@ -92,6 +98,60 @@ function updateMarker() {
       .setLngLat(props.center!)
       .addTo(map);
   }
+}
+
+/** Polygone approximant un cercle (centre [lng, lat], rayon en mètres). */
+function circleToPolygon(center: [number, number], radiusMeters: number, points = 64): GeoJSON.Polygon {
+  const [lng, lat] = center;
+  const coords: [number, number][] = [];
+  const latDegPerM = 1 / 111320;
+  const lngDegPerM = 1 / (111320 * Math.cos((lat * Math.PI) / 180));
+  for (let i = 0; i <= points; i++) {
+    const angle = (i / points) * 2 * Math.PI;
+    coords.push([
+      lng + (radiusMeters * lngDegPerM) * Math.cos(angle),
+      lat + (radiusMeters * latDegPerM) * Math.sin(angle),
+    ]);
+  }
+  return { type: 'Polygon', coordinates: [coords] };
+}
+
+function addRadiusCircleLayer() {
+  if (!map?.getStyle() || map.getSource(RADIUS_CIRCLE_SOURCE_ID)) return;
+  map.addSource(RADIUS_CIRCLE_SOURCE_ID, {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features: [] },
+  });
+  map.addLayer(
+    {
+      id: RADIUS_CIRCLE_LAYER_ID,
+      type: 'fill',
+      source: RADIUS_CIRCLE_SOURCE_ID,
+      paint: {
+        'fill-color': '#0d9488',
+        'fill-opacity': 0.28,
+        'fill-outline-color': 'rgba(13, 148, 136, 0.65)',
+      },
+    },
+    ZONES_FILL_LAYER_ID
+  );
+}
+
+function updateRadiusCircle() {
+  if (!map?.getStyle()) return;
+  const source = map.getSource(RADIUS_CIRCLE_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+  if (!source) return;
+  const center = props.center;
+  const radius = props.radiusMeters ?? 0;
+  if (!center || radius <= 0) {
+    source.setData({ type: 'FeatureCollection', features: [] });
+    return;
+  }
+  const polygon = circleToPolygon(center, radius);
+  source.setData({
+    type: 'FeatureCollection',
+    features: [{ type: 'Feature', properties: {}, geometry: polygon }],
+  });
 }
 
 function applyRiskZonesFilter() {
@@ -229,6 +289,23 @@ function scheduleSync() {
   };
   trySync();
 }
+
+// Cercle de rayon : mettre à jour quand centre ou rayon change.
+watch(
+  () => [props.center, props.radiusMeters] as const,
+  () => {
+    if (!map) return;
+    if (map.getSource(RADIUS_CIRCLE_SOURCE_ID)) {
+      updateRadiusCircle();
+    } else {
+      map.once('load', () => {
+        addRadiusCircleLayer();
+        updateRadiusCircle();
+      });
+    }
+  },
+  { immediate: true }
+);
 
 // Zones PPR : mettre à jour la source GeoJSON seulement quand les données changent (évite setData au simple clic filtre).
 watch(

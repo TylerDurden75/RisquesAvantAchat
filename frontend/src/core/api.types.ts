@@ -21,7 +21,8 @@ export interface RisksApi {
     lat: number,
     lng: number,
     codeInsee?: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    radiusMeters?: number
   ): Promise<RiskScoreResult>;
   getRiskZones(codeInsee: string, signal?: AbortSignal): Promise<RiskZonesGeoJSON>;
 }

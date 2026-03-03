@@ -1,7 +1,7 @@
 /**
  * Service de calcul des risques environnementaux et géologiques.
  *
- * Agrège les données Georisques API v2 : radon, sismicité, PPR (PPRN/PPRT/PPRM), MVT, RGA (argiles), AZI (atlas zones inondables).
+ * Agrège les données Georisques API v2 : radon, sismicité, PPR (PPRN/PPRT/PPRM), MVT, RGA (argiles), AZI (atlas zones inondables), CATNAT (arrêtés catastrophe naturelle).
  * Le rapport PDF communal reste servi en v1 (lien uniquement). Token Bearer requis pour la v2.
  *
  * @module modules/risks/risks.service
@@ -34,6 +34,7 @@ import {
   SCORE_THRESHOLDS,
   MAX_SISMICITE_LEVEL,
 } from './risks.constants.js';
+import { getParcelleByPoint } from '../cadastre/cadastre.service.js';
 import {
   radonResponseSchema,
   sismiciteResponseSchema,
@@ -42,6 +43,10 @@ import {
   pprDetailResponseSchema,
   rgaResponseSchema,
   aziResponseSchema,
+  catnatResponseSchema,
+  sisResponseSchema,
+  basiasResponseSchema,
+  icResponseSchema,
 } from './risks.schemas.js';
 
 export type { RiskCategory, RiskDocument, RiskScoreResult, RiskZonesGeoJSON, ScoreInterpretation };
@@ -89,6 +94,10 @@ const RECOMMENDATIONS: Record<string, string> = {
     'Consulter l\'étude géotechnique (G1-G2) si travaux prévus. Anticiper les travaux de confortement.',
   ppr: 'Consulter le PPR en mairie. Vérifier les obligations d\'assurance (catastrophes naturelles).',
   azi: 'Consulter l\'atlas des zones inondables (AZI) en mairie ou sur Georisques. Vérifier l\'assurance catastrophes naturelles.',
+  catnat: 'Vérifier l\'assurance catastrophes naturelles et l\'historique des sinistres. Consulter le rapport Georisques pour le détail des arrêtés.',
+  sis: 'Consulter le portail Géorisques et la mairie pour les secteurs d\'information sur les sols (SIS). Faire réaliser une étude des sols si nécessaire.',
+  basias: 'Consulter la base BASIAS (anciens sites industriels) sur Géorisques. Faire réaliser une étude des sols en cas de projet.',
+  ic: 'Consulter la fiche installation classée sur Géorisques et la mairie. Vérifier les servitudes et les distances réglementaires.',
 };
 
 function getScoreInterpretation(score: number): ScoreInterpretation {
@@ -110,6 +119,10 @@ type MvtData = z.infer<typeof mvtResponseSchema>;
 type PprData = z.infer<typeof pprResponseSchema>;
 type RgaData = z.infer<typeof rgaResponseSchema>;
 type AziData = z.infer<typeof aziResponseSchema>;
+type CatnatData = z.infer<typeof catnatResponseSchema>;
+type SisData = z.infer<typeof sisResponseSchema>;
+type BasiasData = z.infer<typeof basiasResponseSchema>;
+type IcData = z.infer<typeof icResponseSchema>;
 
 /**
  * Traite les données radon et retourne une catégorie (toujours si données présentes, y compris niveau faible).
@@ -219,6 +232,39 @@ function processAziData(data: AziData | null): { category: RiskCategory | null; 
 }
 
 /**
+ * Traite les données CATNAT (arrêtés de catastrophe naturelle) : catégorie toujours renvoyée.
+ */
+function processCatnatData(data: CatnatData | null): { category: RiskCategory; level: number } {
+  const count = data?.count ?? data?.data?.length ?? 0;
+  const items = data?.data ?? [];
+  const level = count > 0 ? 2 : 0;
+  let description: string;
+  if (count === 0) {
+    description = 'Aucun arrêté de catastrophe naturelle recensé';
+  } else {
+    const first = items[0] as { date_arrete?: string; dateArrete?: string; libelle_risque?: string; libelleRisque?: string } | undefined;
+    const dateStr = first?.date_arrete ?? first?.dateArrete;
+    const year = dateStr ? new Date(dateStr).getFullYear() : null;
+    const libelle = first?.libelle_risque ?? first?.libelleRisque;
+    if (count === 1) {
+      description = libelle ? `${libelle} (${year ?? 'date inconnue'})` : `1 arrêté recensé`;
+    } else {
+      description = year ? `${count} arrêtés recensés (depuis ${year})` : `${count} arrêtés recensés`;
+    }
+  }
+  return {
+    category: {
+      id: 'catnat',
+      name: 'Catastrophes naturelles (historique)',
+      level,
+      description,
+      recommendation: level > 0 ? RECOMMENDATIONS.catnat : undefined,
+    },
+    level,
+  };
+}
+
+/**
  * Traite les données RGA (argiles) : catégorie toujours renvoyée (avec "Non concerné" si pas de données ou niveau 0).
  */
 function processRgaData(data: RgaData | null): { category: RiskCategory | null; level: number } {
@@ -305,6 +351,26 @@ function processPprData(data: PprData | null, reportPdfUrl: string): {
   return { category, documents, level };
 }
 
+function processListRiskData(
+  data: { data: unknown[]; count: number } | null,
+  id: string,
+  name: string,
+  recommendation: string
+): { category: RiskCategory; level: number } {
+  const count = data?.count ?? data?.data?.length ?? 0;
+  const level = count > 0 ? 2 : 0;
+  return {
+    category: {
+      id,
+      name,
+      level,
+      description: count > 0 ? `${count} élément(s) recensé(s)` : 'Aucun recensé',
+      recommendation: level > 0 ? recommendation : undefined,
+    },
+    level,
+  };
+}
+
 /** Résultat brut des appels Georisques (avant agrégation). */
 interface RawRiskData {
   radon: RadonData | null;
@@ -315,13 +381,80 @@ interface RawRiskData {
   mvt: MvtData | null;
   rga: RgaData | null;
   azi: AziData | null;
+  catnat: CatnatData | null;
+  sis: SisData | null;
+  basias: BasiasData | null;
+  ic: IcData | null;
+}
+
+/**
+ * Récupère les données CATNAT (v2 puis v1 en secours).
+ */
+async function fetchCatnatData(codeInsee: string): Promise<CatnatData> {
+  try {
+    const data = await georisquesAdapter.get(
+      `/catnat?codesInsee=${codeInsee}&pageSize=50&pageNumber=0`,
+      8000,
+      { codeInsee }
+    );
+    return catnatResponseSchema.parse(data);
+  } catch {
+    try {
+      const v1 = await georisquesAdapter.getV1<{ data?: unknown[]; results?: number }>(
+        `/catnat?code_insee=${codeInsee}`,
+        8000,
+        { codeInsee }
+      );
+      const arr = Array.isArray(v1?.data) ? v1.data : [];
+      return catnatResponseSchema.parse({ data: arr, results: v1?.results ?? arr.length });
+    } catch (err) {
+      logger.warn('CATNAT API (v2 et v1) failed', { codeInsee, message: err instanceof Error ? err.message : String(err) });
+      return catnatResponseSchema.parse({ data: [], count: 0 });
+    }
+  }
+}
+
+/** Appel Georisques liste (v2 puis v1) — SIS, BASIAS, IC. */
+async function fetchListRiskData(
+  codeInsee: string,
+  pathV2: string,
+  pathV1: string,
+  schema: z.ZodType<SisData, z.ZodTypeDef, unknown>,
+  label: string
+): Promise<SisData> {
+  try {
+    const data = await georisquesAdapter.get(`${pathV2}&pageSize=50&pageNumber=0`, 8000, { codeInsee });
+    return schema.parse(data) as SisData;
+  } catch {
+    try {
+      const v1 = await georisquesAdapter.getV1<{ data?: unknown[]; results?: number }>(pathV1, 8000, { codeInsee });
+      const arr = Array.isArray(v1?.data) ? v1.data : [];
+      return schema.parse({ data: arr, results: v1?.results ?? arr.length }) as SisData;
+    } catch (err) {
+      logger.warn(`${label} API (v2 et v1) failed`, { codeInsee, message: err instanceof Error ? err.message : String(err) });
+      return { data: [], count: 0 };
+    }
+  }
 }
 
 /**
  * Récupère toutes les données Georisques en parallèle pour un code Insee.
  */
 async function fetchAllRiskData(codeInsee: string): Promise<RawRiskData> {
-  const [radonRes, sismiciteRes, pprnRes, pprtRes, pprmRes, mvtRes, rgaRes, aziRes] = await Promise.allSettled([
+  const [
+    radonRes,
+    sismiciteRes,
+    pprnRes,
+    pprtRes,
+    pprmRes,
+    mvtRes,
+    rgaRes,
+    aziRes,
+    catnatRes,
+    sisRes,
+    basiasRes,
+    icRes,
+  ] = await Promise.allSettled([
     georisquesAdapter.get(`/radon?codesInsee=${codeInsee}&pageSize=10&pageNumber=0`, 8000, { codeInsee }).then((data) => radonResponseSchema.parse(data)),
     georisquesAdapter.get(`/zonage_sismique?code_insee=${codeInsee}`, 8000, { codeInsee }).then((data) => sismiciteResponseSchema.parse(data)),
     georisquesAdapter.get(`/gaspar/pprn?codesInsee=${codeInsee}&pageSize=${DEFAULT_PPR_PAGE_SIZE}&pageNumber=0`, PPR_TIMEOUT_MS, { codeInsee }).then((data) => pprResponseSchema.parse(data)),
@@ -345,6 +478,16 @@ async function fetchAllRiskData(codeInsee: string): Promise<RawRiskData> {
         logger.warn('AZI API failed, continuing without data', { codeInsee, message: err instanceof Error ? err.message : String(err) });
         return aziResponseSchema.parse({ content: [], totalElements: 0 });
       }),
+    fetchCatnatData(codeInsee),
+    fetchListRiskData(codeInsee, `/sis?codesInsee=${codeInsee}`, `/sis?code_insee=${codeInsee}`, sisResponseSchema, 'SIS'),
+    fetchListRiskData(codeInsee, `/basias?codesInsee=${codeInsee}`, `/basias?code_insee=${codeInsee}`, basiasResponseSchema, 'BASIAS'),
+    fetchListRiskData(
+      codeInsee,
+      `/installations_classees?codesInsee=${codeInsee}`,
+      `/installations_classees?code_insee=${codeInsee}`,
+      icResponseSchema,
+      'IC'
+    ),
   ]);
   return {
     radon: radonRes.status === 'fulfilled' ? radonRes.value : null,
@@ -355,6 +498,10 @@ async function fetchAllRiskData(codeInsee: string): Promise<RawRiskData> {
     mvt: mvtRes.status === 'fulfilled' ? mvtRes.value : null,
     rga: rgaRes.status === 'fulfilled' ? rgaRes.value : null,
     azi: aziRes.status === 'fulfilled' ? aziRes.value : null,
+    catnat: catnatRes.status === 'fulfilled' ? catnatRes.value : null,
+    sis: sisRes.status === 'fulfilled' ? sisRes.value : null,
+    basias: basiasRes.status === 'fulfilled' ? basiasRes.value : null,
+    ic: icRes.status === 'fulfilled' ? icRes.value : null,
   };
 }
 
@@ -385,7 +532,7 @@ function aggregateRiskData(raw: RawRiskData, reportPdfUrl: string): { categories
 
 const getRisksNearby = async (
   coords: Coordinates,
-  _radiusMeters = DEFAULT_RADIUS_METERS,
+  radiusMeters = DEFAULT_RADIUS_METERS,
   codeInsee?: string
 ): Promise<RiskScoreResult> => {
   if (!codeInsee) {
@@ -396,16 +543,21 @@ const getRisksNearby = async (
   const cached = risksCache.get(cacheKey);
   if (cached) {
     logger.info('Cache hit for risks', { codeInsee });
-    return cached;
+    return { ...cached, radiusMeters };
   }
 
   const reportPdfUrl = `${GEORISQUES_BASE_PDF}/rapport_pdf?code_insee=${codeInsee}`;
   let categories: RiskCategory[] = [];
   let documents: RiskDocument[] = [];
   let totalLevel = 0;
+  let parcelle: RiskScoreResult['parcelle'] = null;
 
   try {
-    const raw = await fetchAllRiskData(codeInsee);
+    const [raw, parcelleResult] = await Promise.all([
+      fetchAllRiskData(codeInsee),
+      getParcelleByPoint(coords[0], coords[1]),
+    ]);
+    parcelle = parcelleResult;
     const partial = aggregateRiskData(raw, reportPdfUrl);
     categories = partial.categories;
     documents = partial.documents;
@@ -424,6 +576,22 @@ const getRisksNearby = async (
     const azi = processAziData(raw.azi);
     categories.push(azi.category!);
     totalLevel += azi.level;
+
+    const catnat = processCatnatData(raw.catnat);
+    categories.push(catnat.category);
+    totalLevel += catnat.level;
+
+    const sis = processListRiskData(raw.sis, 'sis', 'Sites et sols pollués (SIS)', RECOMMENDATIONS.sis);
+    categories.push(sis.category);
+    totalLevel += sis.level;
+
+    const basias = processListRiskData(raw.basias, 'basias', 'Anciens sites industriels (BASIAS)', RECOMMENDATIONS.basias);
+    categories.push(basias.category);
+    totalLevel += basias.level;
+
+    const ic = processListRiskData(raw.ic, 'ic', 'Installations classées', RECOMMENDATIONS.ic);
+    categories.push(ic.category);
+    totalLevel += ic.level;
   } catch (e) {
     logger.error('Georisques fetch error', e, { codeInsee, endpoint: 'risks/nearby' });
   }
@@ -436,6 +604,8 @@ const getRisksNearby = async (
     scoreInterpretation: getScoreInterpretation(globalScore),
     categories,
     documents,
+    parcelle: parcelle ?? undefined,
+    radiusMeters,
   };
   risksCache.set(cacheKey, result);
   logger.info('getRisksNearby: résultat', { codeInsee, globalScore, nbCategories: categories.length, nbDocuments: documents.length });

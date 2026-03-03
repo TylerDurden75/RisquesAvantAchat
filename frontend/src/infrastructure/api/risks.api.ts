@@ -15,10 +15,12 @@ export async function getRisksNearby(
   lat: number,
   lng: number,
   codeInsee?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  radiusMeters?: number
 ): Promise<RiskScoreResult> {
   const params = new URLSearchParams({ lat: String(lat), lng: String(lng) });
   if (codeInsee) params.set('code_insee', codeInsee);
+  if (radiusMeters != null && radiusMeters > 0) params.set('radius', String(radiusMeters));
 
   const res = await fetch(apiUrl(`${API_PREFIX}/risks/nearby?${params}`), { signal });
   if (!res.ok) throw new Error(`Erreur risques: ${res.status}`);
