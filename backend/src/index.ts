@@ -60,6 +60,11 @@ app.use(
     windowMs: 60 * 1000,
     max: rateLimitMax,
     message: { error: 'Trop de requêtes, réessayez plus tard.' },
+    skip: (req) => {
+      // Ne pas compter les tuiles WMS (nombreuses, cachées, calques whitelistés)
+      if (req.method === 'GET' && req.path.includes('/geo/wms')) return true;
+      return false;
+    },
   })
 );
 app.use(express.json({ limit: '1mb' }));
