@@ -16,6 +16,19 @@
 - **Yarn** (gestionnaire de paquets utilisé pour ce projet)
 - Docker & Docker Compose (optionnel pour la BDD)
 
+### Option A : tout lancer d'un coup (recommandé en dev)
+
+À la racine du projet :
+
+```bash
+yarn install
+yarn dev
+```
+
+Cela démarre le **backend** (http://localhost:3000) et le **frontend** (http://localhost:5173) dans le même terminal. Un seul `Ctrl+C` arrête les deux.
+
+### Option B : lancer backend et frontend séparément
+
 ### 1. Backend (recommandé)
 
 ```bash

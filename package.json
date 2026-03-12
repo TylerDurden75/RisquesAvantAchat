@@ -1,0 +1,14 @@
+{
+  "name": "risquesavantachat",
+  "private": true,
+  "description": "Connaître les risques avant d'acheter — évaluation des risques immobiliers",
+  "scripts": {
+    "dev": "concurrently --names \"api,web\" --prefix-colors \"blue,green\" \"yarn --cwd backend dev\" \"yarn --cwd frontend dev\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
