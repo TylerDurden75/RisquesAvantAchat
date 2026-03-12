@@ -46,10 +46,10 @@ const generateReport = async (
   const codeInsee = (address.properties?.citycode as string) || undefined;
 
   try {
-    const [riskScore, dvfData] = await Promise.all([
-      risksService.getRisksNearby(coords, DEFAULT_RADIUS_METERS, codeInsee),
-      codeInsee ? dvfService.getIndicators(codeInsee, lat, lng) : Promise.resolve(null),
-    ]);
+    const riskScore = await risksService.getRisksNearby(coords, DEFAULT_RADIUS_METERS, codeInsee);
+    const dvfData = codeInsee
+      ? await dvfService.getIndicators(codeInsee, lat, lng, riskScore.parcelle ?? undefined)
+      : null;
 
     return {
       id: `report-${Date.now()}`,
@@ -179,11 +179,15 @@ async function generatePdf(report: Report): Promise<Uint8Array> {
   if (dvf) {
     addText('Indicateurs DVF (prix immobilier) :', 11, true);
     const granularite =
-      dvf.granularite === 'quartier' && dvf.rayonMeters
-        ? `quartier (~${dvf.rayonMeters} m)`
-        : dvf.granularite === 'quartier'
-          ? 'quartier'
-          : 'commune';
+      dvf.granularite === 'parcelle'
+        ? 'parcelle cadastrale'
+        : dvf.granularite === 'section'
+          ? 'section cadastrale'
+          : dvf.granularite === 'quartier' && dvf.rayonMeters
+            ? `quartier (~${dvf.rayonMeters} m)`
+            : dvf.granularite === 'quartier'
+              ? 'quartier'
+              : 'commune';
     // Utiliser replace pour éviter les espaces insécables de toLocaleString
     const prixM2 = dvf.prixM2Moyen != null 
       ? String(dvf.prixM2Moyen).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') 

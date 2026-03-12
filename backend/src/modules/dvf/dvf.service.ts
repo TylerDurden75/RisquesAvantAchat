@@ -1,14 +1,14 @@
 /**
  * Service DVF — indicateurs de prix immobiliers.
  *
- * Tente d'abord les prix localisés via l'API Cquest en cascade de rayons
- * (250 m → 500 m → 1 km), en retenant le premier avec assez de ventes.
- * Sinon fallback sur les indicateurs par commune (API Tabulaire data.gouv.fr).
+ * Stratégie : parcelle (Cquest numero_plan) → section (Cquest section) →
+ * cascade rayons (250/500/1000 m) → commune (Tabulaire).
  *
  * @module modules/dvf/dvf.service
  */
 
-import type { DvfIndicators } from '@risquesavantachat/shared-types';
+import type { DvfIndicators, ParcelleInfo } from '@risquesavantachat/shared-types';
+import { config } from '../../config/env.js';
 import { createLruCache } from '../../utils/cache.js';
 import { logger } from '../../utils/logger.js';
 
@@ -16,7 +16,8 @@ export type { DvfIndicators };
 
 const TABULAR_API =
   'https://tabular-api.data.gouv.fr/api/resources/1b85be7c-17ce-42dc-b191-3b8f3c469087/data';
-const CQUEST_API = 'https://api.cquest.org/dvf';
+/** URL de base de l'API DVF Cquest (sans query string). */
+const CQUEST_API = config.cquestDvfApiUrl;
 
 /** Rayons testés en cascade (du plus précis au plus large). */
 const RADII_METERS = [250, 500, 1000];
@@ -24,18 +25,38 @@ const RADII_METERS = [250, 500, 1000];
 const MIN_MUTATIONS_FOR_LOCAL = 5;
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-/** Préfixe des clés de cache (changer pour v2 lors d'un changement de format). */
 const CACHE_KEY_DVF = 'dvf-v1-';
 const CACHE_KEY_DVF_COORDS = 'dvf-coords-v1-';
+const CACHE_KEY_DVF_PARCELLE = 'dvf-parcelle-v1-';
+const CACHE_KEY_DVF_SECTION = 'dvf-section-v1-';
 
 const store = createLruCache<DvfIndicators>({ ttl: CACHE_TTL_MS, max: 1000 });
-
-/** Cache pour requêtes par coords (clé "lat,lon" avec précision 4 décimales) */
 const storeCoords = createLruCache<DvfIndicators>({ ttl: CACHE_TTL_MS, max: 1000 });
+const storeParcelle = createLruCache<DvfIndicators>({ ttl: CACHE_TTL_MS, max: 500 });
+const storeSection = createLruCache<DvfIndicators>({ ttl: CACHE_TTL_MS, max: 500 });
 
 export interface DvfService {
   getIndicatorsByCommune(codeInsee: string): Promise<DvfIndicators | null>;
-  getIndicators(codeInsee: string, lat?: number, lon?: number): Promise<DvfIndicators | null>;
+  getIndicators(
+    codeInsee: string,
+    lat?: number,
+    lon?: number,
+    parcelle?: ParcelleInfo | null
+  ): Promise<DvfIndicators | null>;
+}
+
+/** Construit l'identifiant section au format DGFiP/Cquest (ex. 89304000ZB). */
+function buildSectionCquest(parcelle: ParcelleInfo): string {
+  const code = parcelle.code_insee.trim().slice(0, 5).padEnd(5, '0');
+  const sec = parcelle.section.trim().slice(-2).padStart(2, '0');
+  return `${code}000${sec}`;
+}
+
+/** Construit le numero_plan au format DGFiP/Cquest (ex. 89304000ZB0134). */
+function buildNumeroPlan(parcelle: ParcelleInfo): string {
+  const section = buildSectionCquest(parcelle);
+  const num = parcelle.numero.trim().replace(/\D/g, '').slice(-4).padStart(4, '0');
+  return `${section}${num}`;
 }
 
 async function getIndicatorsByCommune(codeInsee: string): Promise<DvfIndicators | null> {
@@ -109,7 +130,8 @@ function getProp(props: Record<string, unknown> | undefined, ...keys: string[]):
 
 function aggregateFromCquest(
   features: CquestFeature[],
-  codeInsee: string
+  codeInsee: string,
+  granularite: 'parcelle' | 'section' | 'quartier' = 'quartier'
 ): DvfIndicators | null {
   const valid: { prixM2: number; surface: number; type: string }[] = [];
   for (const f of features) {
@@ -147,7 +169,7 @@ function aggregateFromCquest(
     valid.reduce((s, x) => s + x.surface, 0) / valid.length;
   return {
     codeInsee,
-    granularite: 'quartier',
+    granularite,
     prixM2Moyen: Math.round(prixM2Moyen),
     prixMoyen: Math.round(prixMoyen),
     nbMutations: valid.length,
@@ -178,6 +200,34 @@ async function fetchCquestForRadius(
   return json.features ?? [];
 }
 
+async function fetchCquestByNumeroPlan(numeroPlan: string): Promise<CquestFeature[]> {
+  const url = `${CQUEST_API}?numero_plan=${encodeURIComponent(numeroPlan)}`;
+  const res = await fetch(url, {
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(6000),
+  });
+  if (!res.ok) return [];
+  const json = (await res.json()) as {
+    type?: string;
+    features?: CquestFeature[];
+  };
+  return json.features ?? [];
+}
+
+async function fetchCquestBySection(sectionCquest: string): Promise<CquestFeature[]> {
+  const url = `${CQUEST_API}?section=${encodeURIComponent(sectionCquest)}`;
+  const res = await fetch(url, {
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(6000),
+  });
+  if (!res.ok) return [];
+  const json = (await res.json()) as {
+    type?: string;
+    features?: CquestFeature[];
+  };
+  return json.features ?? [];
+}
+
 async function getIndicatorsNearby(
   lat: number,
   lon: number,
@@ -194,7 +244,7 @@ async function getIndicatorsNearby(
   try {
     for (const radiusMeters of RADII_METERS) {
       const features = await fetchCquestForRadius(lat, lon, radiusMeters);
-      const data = aggregateFromCquest(features, codeInsee);
+      const data = aggregateFromCquest(features, codeInsee, 'quartier');
       if (data && (data.nbMutations ?? 0) >= MIN_MUTATIONS_FOR_LOCAL) {
         data.rayonMeters = radiusMeters;
         storeCoords.set(cacheKey, data);
@@ -220,8 +270,57 @@ async function getIndicatorsNearby(
 async function getIndicators(
   codeInsee: string,
   lat?: number,
-  lon?: number
+  lon?: number,
+  parcelle?: ParcelleInfo | null
 ): Promise<DvfIndicators | null> {
+  if (parcelle?.code_insee && parcelle?.section != null && parcelle?.numero != null) {
+    const sectionTrim = parcelle.section.trim();
+    const numeroTrim = parcelle.numero.trim();
+    if (sectionTrim === '' || numeroTrim === '') {
+      // Ne pas utiliser une parcelle avec section/numero vides (évite des appels Cquest inutiles).
+    } else {
+      const parcelleValid = { ...parcelle, section: sectionTrim, numero: numeroTrim };
+      const sectionCquest = buildSectionCquest(parcelleValid);
+      const numeroPlan = buildNumeroPlan(parcelleValid);
+
+    const cacheKeyParcelle = CACHE_KEY_DVF_PARCELLE + numeroPlan;
+    const cachedParcelle = storeParcelle.get(cacheKeyParcelle);
+    if (cachedParcelle) {
+      logger.info('Cache hit for DVF parcelle', { codeInsee, numeroPlan });
+      return cachedParcelle;
+    }
+    try {
+      const featuresParcelle = await fetchCquestByNumeroPlan(numeroPlan);
+      const dataParcelle = aggregateFromCquest(featuresParcelle, codeInsee, 'parcelle');
+      if (dataParcelle && (dataParcelle.nbMutations ?? 0) >= MIN_MUTATIONS_FOR_LOCAL) {
+        storeParcelle.set(cacheKeyParcelle, dataParcelle);
+        logger.info('DVF from Cquest parcelle', { codeInsee, numeroPlan, nbMutations: dataParcelle.nbMutations });
+        return dataParcelle;
+      }
+    } catch (e) {
+      logger.warn('Cquest parcelle failed', { codeInsee, numeroPlan, err: (e as Error).message });
+    }
+
+    const cacheKeySection = CACHE_KEY_DVF_SECTION + sectionCquest;
+    const cachedSection = storeSection.get(cacheKeySection);
+    if (cachedSection) {
+      logger.info('Cache hit for DVF section', { codeInsee, sectionCquest });
+      return cachedSection;
+    }
+    try {
+      const featuresSection = await fetchCquestBySection(sectionCquest);
+      const dataSection = aggregateFromCquest(featuresSection, codeInsee, 'section');
+      if (dataSection && (dataSection.nbMutations ?? 0) >= MIN_MUTATIONS_FOR_LOCAL) {
+        storeSection.set(cacheKeySection, dataSection);
+        logger.info('DVF from Cquest section', { codeInsee, sectionCquest, nbMutations: dataSection.nbMutations });
+        return dataSection;
+      }
+    } catch (e) {
+      logger.warn('Cquest section failed', { codeInsee, sectionCquest, err: (e as Error).message });
+    }
+    }
+  }
+
   if (
     typeof lat === 'number' &&
     typeof lon === 'number' &&

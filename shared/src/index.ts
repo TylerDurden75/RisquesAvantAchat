@@ -57,7 +57,7 @@ export interface RiskZonesGeoJSON {
 // --- DVF ---
 export interface DvfIndicators {
   codeInsee: string;
-  granularite?: 'quartier' | 'commune';
+  granularite?: 'parcelle' | 'section' | 'quartier' | 'commune';
   /** Rayon en mètres utilisé pour le prix local (quartier). Ex. 250, 500, 1000. */
   rayonMeters?: number;
   prixM2Moyen?: number;

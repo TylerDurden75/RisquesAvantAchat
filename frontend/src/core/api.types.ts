@@ -8,6 +8,7 @@
 import type {
   AddressFeature,
   DvfIndicators,
+  ParcelleInfo,
   RiskScoreResult,
   RiskZonesGeoJSON,
 } from '@risquesavantachat/shared-types';
@@ -30,7 +31,12 @@ export interface RisksApi {
 export interface DvfApi {
   getDvfIndicators(
     codeInsee: string,
-    opts?: { lat?: number; lon?: number; signal?: AbortSignal }
+    opts?: {
+      lat?: number;
+      lon?: number;
+      parcelle?: ParcelleInfo | null;
+      signal?: AbortSignal;
+    }
   ): Promise<DvfIndicators | null>;
 }
 

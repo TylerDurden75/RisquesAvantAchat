@@ -34,10 +34,14 @@ Feuille de route pour renforcer la valeur du produit et son potentiel de monéti
 ### Prix DVF — affiner la granularité ✅
 - **Implémenté** : **cascade de rayons** 250 m → 500 m → 1 km via API Cquest ; on retient le premier niveau avec ≥ 5 ventes. Le champ `rayonMeters` et le libellé (ex. « quartier (~250 m) ») sont affichés côté frontend et dans le PDF. Fallback sur moyenne communale (Tabulaire) si aucun rayon n’a assez de données.
 
-### Prix DVF — granularité parcellaire (APIs / alternatives)
-- **Meilleure piste identifiée** : l’**API Cquest** (déjà utilisée) accepte une requête par **parcelle** (`numero_plan`) et par **section** cadastrale. On a déjà la parcelle (section, numero) via le module cadastre (API Carto IGN). En interrogeant DVF avec `numero_plan` (ex. `section=89304000ZB&numero_plan=89304000ZB0134`), on obtiendrait un prix au m² à l’échelle **parcellaire** ou **section** — la meilleure granularité possible en open data. À faire : construire l’identifiant `numero_plan` à partir de `code_insee` + `section` + `numero`, tenter DVF par parcelle puis par section si pas assez de ventes, sinon garder la cascade lat/lon/dist actuelle.
-- **Autres APIs** : **API Données foncières** (Cerema / api.gouv.fr) — DVF+ en accès libre avec requête par **emprise rectangulaire (bbox)** ; API en beta, documentation à confirmer. **Urbanora.io** — API DVF+ avec bbox (à vérifier si gratuite ou commerciale). **Tabulaire data.gouv** — indicateurs déjà utilisés en fallback, granularité commune uniquement.
-- [ ] **À faire** : implémenter DVF par parcelle/section (Cquest `numero_plan` / `section`) en utilisant la parcelle déjà récupérée pour les risques ; afficher la granularité « parcelle » ou « section » dans l’UI.
+### Prix DVF — granularité parcellaire (APIs / alternatives) ✅
+- **Implémenté** : DVF par **parcelle** puis **section** (API Cquest `numero_plan` / `section`). La parcelle est fournie par le module cadastre (IGN) ; construction des identifiants `section_cquest` et `numero_plan` au format DGFiP. Cascade : parcelle → section → rayons 250/500/1000 m → commune. Affichage « parcelle cadastrale » / « section cadastrale » dans l’UI et le PDF.
+- **Référence** : `docs/DVF_PARCELLAIRE.md`.
+
+### Prix DVF — fiabilité API (instance Cquest en propre) — à planifier
+- **Constat** : L’API publique `api.cquest.org/dvf` est souvent indisponible (502), ce qui fait retomber systématiquement sur le prix à l’échelle de la commune (Tabulaire).
+- **Meilleure solution gratuite** : **Héberger sa propre instance** de [dvf_as_api](https://github.com/cquest/dvf_as_api) (même API : lat/lon/dist, section, numero_plan). Nécessite PostgreSQL + import des données DVF (scripts fournis). Une fois en place : plus de dépendance à l’instance publique, pas de 502, même granularité parcelle / section / quartier.
+- [ ] **À faire** : (1) Rendre l’URL de l’API DVF Cquest **configurable** via variable d’environnement (ex. `CQUEST_DVF_API_URL`, défaut `https://api.cquest.org/dvf`). (2) Documenter le déploiement d’une instance dvf_as_api (Docker/PostgreSQL, import DVF). (3) Optionnel : déployer une instance dédiée pour la prod.
 
 ## Phase 1 — Fondations produit (M0–M1)
 

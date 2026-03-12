@@ -1,7 +1,26 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import type { DvfIndicators } from '@risquesavantachat/shared-types';
 
-defineProps<{ dvfIndicators: DvfIndicators }>();
+const props = defineProps<{ dvfIndicators: DvfIndicators }>();
+
+const granulariteLabel = computed(() => {
+  const g = props.dvfIndicators.granularite;
+  if (g === 'parcelle') return 'parcelle cadastrale';
+  if (g === 'section') return 'section cadastrale';
+  if (g === 'quartier' && props.dvfIndicators.rayonMeters) return `quartier (~${props.dvfIndicators.rayonMeters} m)`;
+  if (g === 'quartier') return 'quartier';
+  return 'commune';
+});
+
+const granulariteCaveat = computed(() => {
+  const g = props.dvfIndicators.granularite;
+  if (g === 'parcelle') return 'Prix à l\'échelle de la parcelle cadastrale.';
+  if (g === 'section') return 'Prix à l\'échelle de la section cadastrale.';
+  if (g === 'quartier' && props.dvfIndicators.rayonMeters) return `Prix localisés dans un rayon de ~${props.dvfIndicators.rayonMeters} m.`;
+  if (g === 'quartier') return 'Prix localisés au quartier.';
+  return "Prix à l'échelle de la commune (données quartier indisponibles ou service de prix local temporairement indisponible).";
+});
 </script>
 
 <template>
@@ -9,7 +28,7 @@ defineProps<{ dvfIndicators: DvfIndicators }>();
     <p class="dvf-title">
       Prix immobilier (DVF {{ dvfIndicators.annee ?? "" }})
       <span v-if="dvfIndicators.granularite" class="dvf-granularite">
-        — {{ dvfIndicators.granularite === "quartier" && dvfIndicators.rayonMeters ? `quartier (~${dvfIndicators.rayonMeters} m)` : dvfIndicators.granularite === "quartier" ? "quartier" : "commune" }}
+        — {{ granulariteLabel }}
       </span>
     </p>
     <p class="dvf-value">
@@ -32,7 +51,7 @@ defineProps<{ dvfIndicators: DvfIndicators }>();
     <details class="dvf-disclaimer">
       <summary>Limites des données DVF</summary>
       <p class="dvf-caveat">
-        {{ dvfIndicators.granularite === "quartier" && dvfIndicators.rayonMeters ? `Prix localisés dans un rayon de ~${dvfIndicators.rayonMeters} m.` : dvfIndicators.granularite === "quartier" ? "Prix localisés au quartier." : "Prix à l'échelle de la commune (pas assez de ventes au quartier)." }}
+        {{ granulariteCaveat }}
         Les prix peuvent être obsolètes (retard de plusieurs mois voire plus d'un an). Couverture incomplète : Moselle, Bas-Rhin, Haut-Rhin et Mayotte non couverts. Toutes les ventes ne sont pas enregistrées. Pour une estimation fiable, consultez un professionnel ou utilisez MeilleursAgents.
       </p>
     </details>

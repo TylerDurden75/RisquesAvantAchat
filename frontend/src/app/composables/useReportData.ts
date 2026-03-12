@@ -31,7 +31,17 @@ export function useReportData() {
   });
   const { zones } = useRiskZones(codeInsee);
   const mapCenterRef = computed(() => mapCenter.value);
-  const { indicators: dvfIndicators } = useDvf(codeInsee, mapCenterRef);
+  /** Coordonnées pour DVF : mapCenter ou géométrie de l'adresse (pour avoir lat/lon dès la sélection). */
+  const dvfCoordsRef = computed(() => {
+    const center = mapCenter.value;
+    if (center != null) return center;
+    const addr = selectedAddress.value;
+    const coords = addr?.geometry?.coordinates;
+    if (coords?.length === 2) return [coords[0], coords[1]] as [number, number];
+    return undefined;
+  });
+  const parcelleRef = computed(() => risks.value?.parcelle ?? null);
+  const { indicators: dvfIndicators } = useDvf(codeInsee, dvfCoordsRef, parcelleRef);
 
   const availableRiskTypes = computed(() => {
     const fromZones = extractRiskTypes(zones.value);

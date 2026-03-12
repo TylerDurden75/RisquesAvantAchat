@@ -37,4 +37,6 @@ export const config = {
   })(),
   /** @type {string | undefined} Token Bearer pour l'API Georisques v2 (optionnel ; si absent, seule la v1 est utilisée) */
   georisquesApiToken: process.env.GEORISQUES_API_TOKEN?.trim() || undefined,
+  /** @type {string} URL de l'API DVF Cquest (ex: https://api.cquest.org/dvf ou http://localhost:8888/dvf pour une instance auto-hébergée) */
+  cquestDvfApiUrl: (process.env.CQUEST_DVF_API_URL?.trim() || 'https://api.cquest.org/dvf').replace(/\/?$/, ''),
 } as const;
