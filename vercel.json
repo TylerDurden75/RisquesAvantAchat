@@ -1,0 +1,16 @@
+{
+  "buildCommand": "yarn --cwd shared install && yarn --cwd shared build && yarn --cwd frontend install && yarn --cwd frontend build",
+  "outputDirectory": "frontend/dist",
+  "installCommand": "yarn install",
+  "framework": "vite",
+  "rewrites": [{ "source": "/((?!api|assets|.*\\.).*)", "destination": "/index.html" }],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" }
+      ]
+    }
+  ]
+}
