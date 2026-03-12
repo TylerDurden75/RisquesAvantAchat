@@ -26,7 +26,7 @@ export const config = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   /** @type {string[]} Domaines autorisés pour CORS (en production, ALLOWED_ORIGINS doit être défini) */
   allowedOrigins: (() => {
-    const raw = process.env.ALLOWED_ORIGINS?.split(',').map((o) => o.trim()).filter(Boolean) ?? null;
+    const raw = process.env.ALLOWED_ORIGINS?.split(',').map((o) => o.trim().replace(/\/+$/, '')).filter(Boolean) ?? null;
     if (process.env.NODE_ENV === 'production') {
       if (!raw?.length) {
         throw new Error('ALLOWED_ORIGINS must be set in production (e.g. https://votredomaine.fr)');

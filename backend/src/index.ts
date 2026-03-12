@@ -40,7 +40,12 @@ app.use(cors({
     if (!origin && config.nodeEnv === 'development') {
       return callback(null, true);
     }
-    if (!origin || config.allowedOrigins.includes(origin)) {
+    const normalizedOrigin = origin?.replace(/\/+$/, '') ?? '';
+    const allowed =
+      !origin ||
+      config.allowedOrigins.includes(normalizedOrigin) ||
+      (normalizedOrigin.endsWith('.vercel.app') && config.nodeEnv === 'production');
+    if (allowed) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
