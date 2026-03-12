@@ -5,10 +5,15 @@
  * @module app/composables
  */
 
-import { inject, computed, ref, watch } from 'vue';
-import { useRisks, useRiskZones, extractRiskTypes, ARGILES_RISK_TYPE } from '@features/risks';
-import { useDvf } from '@features/dvf';
-import { GEO_CONTEXT_KEY } from '../geoContext.js';
+import { inject, computed, ref, watch } from "vue";
+import {
+  useRisks,
+  useRiskZones,
+  extractRiskTypes,
+  ARGILES_RISK_TYPE,
+} from "@features/risks";
+import { useDvf } from "@features/dvf";
+import { GEO_CONTEXT_KEY } from "../geoContext.js";
 
 /** Rayons de zone disponibles (mètres). */
 export const RADIUS_PRESETS = [500, 1000, 2000, 5000] as const;
@@ -20,17 +25,23 @@ export function useReportData() {
   const copyShareLink = geo.copyShareLink;
 
   const radiusMeters = ref(500);
-  const { risks, loading, error, retry } = useRisks(selectedAddress, undefined, radiusMeters);
+  const { risks, loading, error, retry } = useRisks(
+    selectedAddress,
+    undefined,
+    radiusMeters,
+  );
   const codeInsee = computed(() => {
     const addr = selectedAddress.value?.properties;
     if (!addr) return undefined;
     const citycode = (addr.citycode as string)?.trim();
     if (citycode) return citycode;
-    const id = typeof addr.id === 'string' && /^\d{5}$/.test(addr.id) ? addr.id : undefined;
+    const id =
+      typeof addr.id === "string" && /^\d{5}$/.test(addr.id)
+        ? addr.id
+        : undefined;
     return id ?? undefined;
   });
   const { zones } = useRiskZones(codeInsee);
-  const mapCenterRef = computed(() => mapCenter.value);
   /** Coordonnées pour DVF : mapCenter ou géométrie de l'adresse (pour avoir lat/lon dès la sélection). */
   const dvfCoordsRef = computed(() => {
     const center = mapCenter.value;
@@ -41,7 +52,11 @@ export function useReportData() {
     return undefined;
   });
   const parcelleRef = computed(() => risks.value?.parcelle ?? null);
-  const { indicators: dvfIndicators } = useDvf(codeInsee, dvfCoordsRef, parcelleRef);
+  const { indicators: dvfIndicators } = useDvf(
+    codeInsee,
+    dvfCoordsRef,
+    parcelleRef,
+  );
 
   const availableRiskTypes = computed(() => {
     const fromZones = extractRiskTypes(zones.value);
@@ -55,15 +70,19 @@ export function useReportData() {
     zones,
     (z) => {
       const fromZones = extractRiskTypes(z);
-      selectedRiskTypes.value = [...new Set([...fromZones, ARGILES_RISK_TYPE])].sort();
+      selectedRiskTypes.value = [
+        ...new Set([...fromZones, ARGILES_RISK_TYPE]),
+      ].sort();
     },
-    { immediate: true, flush: 'sync' },
+    { immediate: true, flush: "sync" },
   );
 
   function toggleRiskType(type: string) {
     const idx = selectedRiskTypes.value.indexOf(type);
     if (idx >= 0) {
-      selectedRiskTypes.value = selectedRiskTypes.value.filter((t) => t !== type);
+      selectedRiskTypes.value = selectedRiskTypes.value.filter(
+        (t) => t !== type,
+      );
     } else {
       selectedRiskTypes.value = [...selectedRiskTypes.value, type].sort();
     }
